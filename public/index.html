@@ -1,0 +1,201 @@
+<html>
+<head>
+<title>jQuery JS Form</title>
+
+<script src="https://code.jquery.com/jquery-3.2.1.js"></script>
+<script src="/__/firebase/3.9.0/firebase-app.js"></script>
+<script src="/__/firebase/3.9.0/firebase-auth.js"></script>
+<script src="/__/firebase/3.9.0/firebase-database.js"></script>
+<script src="/__/firebase/init.js"></script>
+
+
+<script type='text/javascript'>
+var grey = '#ccc';
+
+var currentUID, navSection, contentSection;
+
+var containerStyle = {
+    border: '1px solid ' + grey,
+    padding: '5px',
+    margin: '2px',
+};
+
+function Input(placeholder) {
+    return $('<input/>').attr('placeholder', placeholder || '');
+};
+
+function NavSection() {
+  var title = $('<h1/>').text('jQuery Firebase Demo');
+  var signInButton = $('<button/>').text('Sign In').on('click', signIn);
+  var signOutButton = $('<button/>').text('Sign Out').on('click', signOut);
+
+  return $('<div/>').append(
+      title,
+      signInButton,
+      signOutButton);
+}
+
+function Post(key, value) {
+  console.log(key, value);
+  var html = `
+    <h3>${value.title}</h3>
+    <p>directly responsible individual: ${value.author}</p>
+    <p>${value.body}</p>
+    `;
+  return $('<div/>').html(html);
+}
+
+function LivingForm(state={}) {
+    var title = Input('Title').on('keyup', displayInput);
+    var body = Input('Body').on('keyup', displayInput);
+    var output = $('<div/>').css(containerStyle);
+    var saveButton = $('<button/>')
+      .text('Save')
+      .on('click', function() {
+        newPostForCurrentUser(state);
+    });
+
+    return $('<div/>').append(title, body, saveButton, output);
+
+    function displayInput() {
+      state.title = title.val();
+      state.body = body.val();
+
+        var template = `
+          <h2>${state.title}</h2>
+          <p>${state.body}</p>
+        `;
+        output.html(template);
+    };
+};
+
+/**
+ * Creates a new post for the current user.
+ */
+function newPostForCurrentUser(state) {
+  // [START single_value_read]
+  var userId = firebase.auth().currentUser.uid;
+  return firebase.database()
+    .ref('/users/' + userId)
+    .once('value')
+    .then(function(snapshot) {
+      var username = snapshot.val().username;
+      // [START_EXCLUDE]
+      return writeNewPost(
+          firebase.auth().currentUser.uid,
+          username,
+          firebase.auth().currentUser.photoURL,
+          state
+        );
+      // [END_EXCLUDE]
+  });
+  // [END single_value_read]
+}
+
+/**
+ * Saves a new post to the Firebase DB.
+ */
+// [START write_fan_out]
+function writeNewPost(uid, username, picture, state) {
+  // A post entry.
+  var postData = {
+    author: username,
+    uid: uid,
+    body: state.body,
+    title: state.title,
+    data: state,
+    authorPic: picture
+  };
+
+  // Get a key for a new Post.
+  var newPostKey = firebase.database().ref().child('posts').push().key;
+
+  // Write the new post's data simultaneously in the posts list and the user's post list.
+  var updates = {};
+  updates['/posts/' + newPostKey] = postData;
+
+  return firebase.database().ref().update(updates);
+}
+// [END write_fan_out]
+
+
+function signIn() {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider);
+};
+
+function signOut() {
+  firebase.auth().signOut();
+  currentUID = null;
+};
+
+function onAuthStateChanged(user) {
+  // We ignore token refresh events.
+  if (user && currentUID === user.uid) return;
+
+  cleanupUi();
+  if (user) {
+    currentUID = user.uid;
+    //splashPage.style.display = 'none';
+    //writeUserData(user.uid, user.displayName, user.email, user.photoURL);
+    startDatabaseQueries(allPostsSection);
+  } else {
+    // Set currentUID to null.
+    //currentUID = null;
+    // Display the splash page where you can sign-in.
+    //splashPage.style.display = '';
+  }
+}
+
+function cleanupUi() {
+
+};
+
+function startDatabaseQueries(sectionElement) {
+  var postsRef = firebase.database().ref('posts');
+  fetchPosts(postsRef, sectionElement);
+};
+
+
+function fetchPosts(postsRef, sectionElement) {
+  postsRef.on('child_added', function(data) {
+    console.log('added', data);
+    sectionElement.prepend(Post(data.key, data.val()));
+  });
+
+  postsRef.on('child_changed', function(data) {	
+    console.log('changed', data);
+  });
+
+  postsRef.on('child_removed', function(data) {
+    console.log('removed', data);
+  });
+};
+
+function init() {
+  var state = {};
+  var logic = {
+    showForm: showForm,
+    showAllPosts: showAllPosts
+  };
+  navSection = NavSection(state, logic);
+  formSection = $('<div/>');
+  formSection.append(LivingForm());
+  allPostsSection = $('<div/>');
+  $('body').append(navSection, formSection, allPostsSection);
+  firebase.auth().onAuthStateChanged(onAuthStateChanged);
+
+  function showForm() {
+  };
+
+  function showAllPosts() {
+  };
+}
+</script>
+
+</head>
+
+<body onLoad="init()"></body>
+
+</html>
+
